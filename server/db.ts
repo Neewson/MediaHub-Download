@@ -152,7 +152,7 @@ const SAMPLE_MEDIA = (userId: string): MediaFile[] => [
     id: `sample-video-1-${userId}`,
     userId,
     title: "Big Buck Bunny - Animação Clássica",
-    url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    url: "https://media.w3.org/2010/05/bunny/trailer.mp4",
     thumbnail: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=60",
     duration: "09:56",
     fileSize: "120.4 MB",
@@ -170,7 +170,7 @@ const SAMPLE_MEDIA = (userId: string): MediaFile[] => [
     id: `sample-video-2-${userId}`,
     userId,
     title: "Sintel - Open Source Movie Trailer",
-    url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+    url: "https://media.w3.org/2010/05/sintel/trailer_hd.mp4",
     thumbnail: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&auto=format&fit=crop&q=60",
     duration: "00:52",
     fileSize: "15.8 MB",
@@ -221,6 +221,32 @@ const SAMPLE_MEDIA = (userId: string): MediaFile[] => [
     createdAt: new Date().toISOString(), // Just now
   }
 ];
+
+function sanitizeUrl(url: string | undefined): string {
+  if (!url) return "";
+  if (url.includes("commondatastorage.googleapis.com")) {
+    if (url.includes("BigBuckBunny.mp4")) {
+      return "https://media.w3.org/2010/05/bunny/trailer.mp4";
+    }
+    if (url.includes("Sintel.mp4")) {
+      return "https://media.w3.org/2010/05/sintel/trailer_hd.mp4";
+    }
+    if (url.includes("ForBiggerJoyrides.mp4")) {
+      return "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
+    }
+    if (url.includes("ForBiggerEscapes.mp4")) {
+      return "https://media.w3.org/2010/05/sintel/trailer_hd.mp4";
+    }
+    if (url.includes("ForBiggerBlazes.mp4")) {
+      return "https://media.w3.org/2010/05/bunny/trailer.mp4";
+    }
+    if (url.includes("ForBiggerFun.mp4")) {
+      return "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
+    }
+    return "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
+  }
+  return url;
+}
 
 // Read from JSON file
 export function readDatabase(): DatabaseSchema {
@@ -287,6 +313,16 @@ export function readDatabase(): DatabaseSchema {
           { id: "log-1", userId: "user-admin", userEmail: "admin@mediahub.com", action: "Sessão iniciada", ip: "127.0.0.1", userAgent: "Mozilla/5.0", createdAt: new Date().toISOString() }
         ]
       };
+      
+      initialDb.downloads.forEach((dl: any) => {
+        if (dl.url) dl.url = sanitizeUrl(dl.url);
+        if (dl.resolvedUrl) dl.resolvedUrl = sanitizeUrl(dl.resolvedUrl);
+      });
+      initialDb.media_files.forEach((m: any) => {
+        if (m.url) m.url = sanitizeUrl(m.url);
+        if (m.resolvedUrl) m.resolvedUrl = sanitizeUrl(m.resolvedUrl);
+      });
+
       fs.writeFileSync(DB_FILE_PATH, JSON.stringify(initialDb, null, 2), "utf-8");
       return initialDb;
     }
@@ -305,6 +341,15 @@ export function readDatabase(): DatabaseSchema {
     if (!parsed.history) parsed.history = [];
     if (!parsed.settings) parsed.settings = [];
     if (!parsed.audit_logs) parsed.audit_logs = [];
+
+    parsed.downloads.forEach((dl: any) => {
+      if (dl.url) dl.url = sanitizeUrl(dl.url);
+      if (dl.resolvedUrl) dl.resolvedUrl = sanitizeUrl(dl.resolvedUrl);
+    });
+    parsed.media_files.forEach((m: any) => {
+      if (m.url) m.url = sanitizeUrl(m.url);
+      if (m.resolvedUrl) m.resolvedUrl = sanitizeUrl(m.resolvedUrl);
+    });
 
     return parsed;
   } catch (err) {

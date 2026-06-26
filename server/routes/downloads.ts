@@ -161,10 +161,10 @@ async function processDownload(downloadId: string) {
         if (!cobaltSuccess) {
           console.log("Cobalt API did not resolve. Falling back to open-source sample pool to ensure playback.");
           const videoUrls = [
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+            "https://media.w3.org/2010/05/sintel/trailer_hd.mp4",
+            "https://media.w3.org/2010/05/bunny/trailer.mp4",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
           ];
           const audioUrls = [
             "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
