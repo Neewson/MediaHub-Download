@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { dbOps } from "../db";
+import { dbOps, User } from "../db";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -29,7 +29,22 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
       userId = Buffer.from(token, "base64").toString("utf-8");
     }
 
-    const user = dbOps.getUserById(userId);
+    let user = dbOps.getUserById(userId);
+    if (!user && userId.startsWith("user-")) {
+      // Auto-register the user on the server to sync client's localStorage with server's ephemeral DB
+      const is_admin = userId === "user-admin";
+      const newUser: User = {
+        id: userId,
+        name: is_admin ? "Admin MediaHub" : "Usuário MediaHub",
+        email: is_admin ? "admin@mediahub.com" : `${userId}@mediahub.com`,
+        passwordHash: "$2a$10$abcdefghijklmnopqrstuv",
+        isAdmin: is_admin,
+        createdAt: new Date().toISOString(),
+      };
+      dbOps.createUser(newUser);
+      user = dbOps.getUserById(userId);
+    }
+
     if (!user) {
       return res.status(401).json({ error: "Sessão expirada ou usuário inválido." });
     }

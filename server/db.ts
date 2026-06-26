@@ -113,7 +113,19 @@ export interface DatabaseSchema {
   audit_logs: AuditLog[];
 }
 
-const isVercel = !!process.env.VERCEL;
+// Determine if the environment has a read-only filesystem (e.g., serverless environments like Vercel, Netlify, etc.)
+let isReadOnlyEnv = !!process.env.VERCEL;
+if (!isReadOnlyEnv) {
+  try {
+    const testFile = path.join(process.cwd(), ".write-test-" + Date.now());
+    fs.writeFileSync(testFile, "test", "utf-8");
+    fs.unlinkSync(testFile);
+  } catch (e) {
+    isReadOnlyEnv = true;
+  }
+}
+
+export const isVercel = isReadOnlyEnv;
 const DB_FILE_PATH = isVercel
   ? path.join("/tmp", "db.json")
   : path.join(process.cwd(), "db.json");
