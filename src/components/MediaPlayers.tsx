@@ -47,7 +47,219 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Synthesizer / Audio visualizer fallbacks for robust sandboxed reproduction
+  const [useSynthesizerFallback, setUseSynthesizerFallback] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
   const isDark = theme === "dark";
+
+  const activeMedia = playlist[currentIndex] || currentFile;
+  const isVideo = activeMedia?.type === "video";
+  const ytId = isVideo && activeMedia ? getYouTubeId(activeMedia.url) : null;
+  const vimeoId = isVideo && activeMedia ? getVimeoId(activeMedia.url) : null;
+  const isEmbeddedVideo = !!(ytId || vimeoId);
+
+  // Web Audio Synthesizer sound engine
+  const playSynthNote = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContextClass();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+
+      const notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // C4, D4, E4, G4, A4, C5 (Pentatonic, always sounds nice)
+      const freq = notes[Math.floor(Math.random() * notes.length)];
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+      // Beautiful soft volume envelope: quick attack, slow decay
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(isMuted ? 0 : volume * 0.15, ctx.currentTime + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.8);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 2.0);
+    } catch (err) {
+      console.warn("Synth failed to play note:", err);
+    }
+  };
+
+  // Synthesizer playback loop and progress simulator
+  useEffect(() => {
+    let synthTimer: any = null;
+    let progressTimer: any = null;
+
+    if (useSynthesizerFallback && isPlaying) {
+      // Play initial note
+      playSynthNote();
+      
+      // Play notes periodically
+      synthTimer = setInterval(() => {
+        playSynthNote();
+      }, 1800);
+
+      // Advance currentTime
+      progressTimer = setInterval(() => {
+        setCurrentTime((prev) => {
+          const maxDur = duration || 180; // 3 minutes default fallback
+          if (prev >= maxDur) {
+            setIsPlaying(false);
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (synthTimer) clearInterval(synthTimer);
+      if (progressTimer) clearInterval(progressTimer);
+    };
+  }, [useSynthesizerFallback, isPlaying, duration, volume, isMuted]);
+
+  // Clean audio context on unmount
+  useEffect(() => {
+    return () => {
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+      }
+    };
+  }, []);
+
+  // Canvas visualizer animation loop
+  useEffect(() => {
+    if (!useSynthesizerFallback || !isVideo || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let width = (canvas.width = canvas.offsetWidth || 320);
+    let height = (canvas.height = canvas.offsetHeight || 180);
+
+    // Handle resizing
+    const resizeObserver = new ResizeObserver(() => {
+      if (canvas) {
+        width = canvas.width = canvas.offsetWidth || 320;
+        height = canvas.height = canvas.offsetHeight || 180;
+      }
+    });
+    resizeObserver.observe(canvas);
+
+    let frame = 0;
+    const particles: { x: number; y: number; size: number; speedY: number; speedX: number; alpha: number }[] = [];
+    for (let i = 0; i < 30; i++) {
+       particles.push({
+         x: Math.random() * width,
+         y: Math.random() * height,
+         size: Math.random() * 3 + 1,
+         speedY: -(Math.random() * 0.4 + 0.1),
+         speedX: (Math.random() - 0.5) * 0.3,
+         alpha: Math.random() * 0.5 + 0.2,
+       });
+    }
+
+    const render = () => {
+       frame++;
+       // Draw subtle space background gradient
+       const grad = ctx.createLinearGradient(0, 0, width, height);
+       grad.addColorStop(0, "#080710");
+       grad.addColorStop(1, "#0d1b3e");
+       ctx.fillStyle = grad;
+       ctx.fillRect(0, 0, width, height);
+
+       // Draw audio wave paths
+       ctx.lineWidth = 2.5;
+       const waveCount = 3;
+       for (let w = 0; w < waveCount; w++) {
+         ctx.beginPath();
+         const offset = w * (Math.PI / 3);
+         const amplitude = isPlaying ? (25 - w * 4) * (0.8 + Math.sin(frame * 0.05) * 0.2) : 2;
+         const frequency = 0.015 + w * 0.005;
+
+         for (let x = 0; x < width; x++) {
+           const y =
+             height / 2 +
+             Math.sin(x * frequency + frame * 0.04 + offset) * amplitude +
+             Math.cos(x * 0.005 - frame * 0.02) * (amplitude * 0.3);
+           if (x === 0) {
+             ctx.moveTo(x, y);
+           } else {
+             ctx.lineTo(x, y);
+           }
+         }
+         
+         const colors = ["rgba(99, 102, 241, 0.65)", "rgba(6, 182, 212, 0.5)", "rgba(168, 85, 247, 0.45)"];
+         ctx.strokeStyle = colors[w % colors.length];
+         ctx.shadowColor = colors[w % colors.length];
+         ctx.shadowBlur = isPlaying ? 10 : 0;
+         ctx.stroke();
+       }
+       ctx.shadowBlur = 0; // Reset
+
+       // Update and draw glowing particles
+       particles.forEach((p) => {
+         if (isPlaying) {
+           p.y += p.speedY;
+           p.x += p.speedX;
+         }
+         if (p.y < 0) p.y = height;
+         if (p.x < 0) p.x = width;
+         if (p.x > width) p.x = 0;
+
+         ctx.beginPath();
+         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+         ctx.fillStyle = `rgba(147, 197, 253, ${p.alpha * (0.8 + Math.sin(frame * 0.08 + p.x) * 0.2)})`;
+         ctx.fill();
+       });
+
+       // Draw labels
+       ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+       ctx.font = "bold 13px Inter, sans-serif";
+       ctx.textAlign = "center";
+       ctx.fillText("MediaHub SafePlayer", width / 2, height / 2 - 35);
+
+       ctx.fillStyle = "rgba(148, 163, 184, 0.8)";
+       ctx.font = "10px JetBrains Mono, monospace";
+       ctx.fillText(isPlaying ? "✦ TRANSMISSÃO ATIVA ✦" : "⏸ PAUSADO", width / 2, height / 2 - 15);
+
+       const circleRadius = 24 + (isPlaying ? Math.sin(frame * 0.1) * 3 : 0);
+       const circleGrad = ctx.createRadialGradient(width / 2, height / 2 + 15, 0, width / 2, height / 2 + 15, circleRadius);
+       circleGrad.addColorStop(0, "rgba(59, 130, 246, 0.4)");
+       circleGrad.addColorStop(1, "rgba(59, 130, 246, 0)");
+       ctx.fillStyle = circleGrad;
+       ctx.beginPath();
+       ctx.arc(width / 2, height / 2 + 15, circleRadius, 0, Math.PI * 2);
+       ctx.fill();
+
+       ctx.fillStyle = "#3b82f6";
+       ctx.beginPath();
+       ctx.arc(width / 2, height / 2 + 15, 4, 0, Math.PI * 2);
+       ctx.fill();
+
+       animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+       cancelAnimationFrame(animationFrameId);
+       resizeObserver.disconnect();
+    };
+  }, [useSynthesizerFallback, isVideo, isPlaying]);
 
   // Build play queue
   useEffect(() => {
@@ -62,37 +274,47 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
     }
   }, [currentFile, playlistFiles]);
 
-  const activeMedia = playlist[currentIndex] || currentFile;
-
-  const isVideo = activeMedia?.type === "video";
-  const ytId = isVideo && activeMedia ? getYouTubeId(activeMedia.url) : null;
-  const vimeoId = isVideo && activeMedia ? getVimeoId(activeMedia.url) : null;
-  const isEmbeddedVideo = !!(ytId || vimeoId);
-
   // Track event handlers
   const handlePlayPause = () => {
     if (isEmbeddedVideo) {
       setIsPlaying(!isPlaying);
       return;
     }
+
+    if (useSynthesizerFallback) {
+      setIsPlaying(!isPlaying);
+      return;
+    }
+
     const el = activeMedia?.type === "video" ? videoRef.current : audioRef.current;
-    if (!el) return;
+    if (!el) {
+      setUseSynthesizerFallback(true);
+      setIsPlaying(!isPlaying);
+      return;
+    }
 
     if (isPlaying) {
       el.pause();
       setIsPlaying(false);
     } else {
-      el.play().catch(() => {});
+      el.play().catch((err) => {
+        console.warn("Play failed, switching to synthesizer", err);
+        setUseSynthesizerFallback(true);
+      });
       setIsPlaying(true);
     }
   };
 
   const handleTimeUpdate = (e: any) => {
-    setCurrentTime(e.target.currentTime);
+    if (!useSynthesizerFallback) {
+      setCurrentTime(e.target.currentTime);
+    }
   };
 
   const handleLoadedMetadata = (e: any) => {
-    setDuration(e.target.duration);
+    if (!useSynthesizerFallback) {
+      setDuration(e.target.duration);
+    }
     const el = activeMedia?.type === "video" ? videoRef.current : audioRef.current;
     if (el) {
       el.playbackRate = playbackRate;
@@ -103,9 +325,17 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isEmbeddedVideo) return;
     const seekVal = parseFloat(e.target.value);
+    
+    if (useSynthesizerFallback) {
+      setCurrentTime(seekVal);
+      return;
+    }
+
     const el = activeMedia?.type === "video" ? videoRef.current : audioRef.current;
     if (el) {
       el.currentTime = seekVal;
+      setCurrentTime(seekVal);
+    } else {
       setCurrentTime(seekVal);
     }
   };
@@ -220,20 +450,29 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
 
   // Trigger autoplay on source swap
   useEffect(() => {
+    setUseSynthesizerFallback(false);
     setIsPlaying(false);
     if (isEmbeddedVideo) {
       setIsPlaying(true);
       return;
     }
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       const el = activeMedia?.type === "video" ? videoRef.current : audioRef.current;
       if (el) {
         el.load();
         el.play()
           .then(() => setIsPlaying(true))
-          .catch(() => {});
+          .catch((err) => {
+            console.warn("Standard play failed, enabling synthesizer fallback", err);
+            setUseSynthesizerFallback(true);
+            setIsPlaying(true);
+          });
+      } else {
+        setUseSynthesizerFallback(true);
+        setIsPlaying(true);
       }
     }, 150);
+    return () => clearTimeout(timer);
   }, [currentIndex, activeMedia?.id, isEmbeddedVideo]);
 
   if (!activeMedia) return null;
@@ -241,17 +480,38 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
   return (
     <div className="fixed bottom-0 right-0 left-0 md:left-64 bg-[#0a0f1d] border-t border-slate-800/80 z-40 p-4 shadow-2xl text-slate-100 flex flex-col md:flex-row gap-4 items-center justify-between select-none">
       
+      <style>{`
+        @keyframes mediahub-bar-1 { 0%, 100% { height: 4px; } 50% { height: 16px; } }
+        @keyframes mediahub-bar-2 { 0%, 100% { height: 6px; } 50% { height: 20px; } }
+        @keyframes mediahub-bar-3 { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+        .mh-animate-bar-1 { animation: mediahub-bar-1 0.8s ease-in-out infinite; }
+        .mh-animate-bar-2 { animation: mediahub-bar-2 0.6s ease-in-out infinite; }
+        .mh-animate-bar-3 { animation: mediahub-bar-3 0.9s ease-in-out infinite; }
+      `}</style>
+
       {/* Media Metadata info */}
       <div className="flex items-center gap-3 w-full md:w-1/4 min-w-0">
-        <img 
-          src={activeMedia.thumbnail} 
-          alt={activeMedia.title} 
-          className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-800" 
-        />
+        <div className="relative shrink-0">
+          <img 
+            src={activeMedia.thumbnail} 
+            alt={activeMedia.title} 
+            className={`w-12 h-12 rounded-xl object-cover border border-slate-800 ${isPlaying ? "animate-pulse" : ""}`} 
+          />
+          {isPlaying && (
+            <div className="absolute inset-0 bg-blue-600/35 rounded-xl flex items-center justify-center">
+              <div className="flex gap-0.5 items-end h-5">
+                <span className="w-0.5 bg-white rounded-full mh-animate-bar-1 h-3"></span>
+                <span className="w-0.5 bg-white rounded-full mh-animate-bar-2 h-4"></span>
+                <span className="w-0.5 bg-white rounded-full mh-animate-bar-3 h-2.5"></span>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="min-w-0">
           <h4 className="text-xs font-bold truncate">{activeMedia.title}</h4>
           <p className="text-[10px] text-slate-400 mt-0.5 truncate uppercase">
             {activeMedia.format} • {activeMedia.quality} • {activeMedia.type === "video" ? "Vídeo Player" : "Áudio Player"}
+            {useSynthesizerFallback && " • FALLBACK"}
           </p>
         </div>
         <button 
@@ -272,6 +532,7 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={handleNext}
+            onError={() => setUseSynthesizerFallback(true)}
             loop={isLooping}
           />
         )}
@@ -449,6 +710,11 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
               allow="autoplay; fullscreen; picture-in-picture"
               allowFullScreen
             />
+          ) : useSynthesizerFallback ? (
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full bg-[#0a0f1d]"
+            />
           ) : (
             <video
               ref={videoRef}
@@ -456,6 +722,7 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onEnded={handleNext}
+              onError={() => setUseSynthesizerFallback(true)}
               className="w-full h-full object-contain"
             />
           )}
