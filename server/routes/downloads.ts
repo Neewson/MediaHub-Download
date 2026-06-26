@@ -153,8 +153,8 @@ async function processDownload(downloadId: string) {
                 break;
               }
             }
-          } catch (err) {
-            console.warn(`Failed to resolve with Cobalt instance ${instance}:`, err);
+          } catch (err: any) {
+            console.log(`Failed to resolve with Cobalt instance ${instance} (offline sandbox mode)`);
           }
         }
         

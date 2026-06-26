@@ -161,9 +161,20 @@ export default function DownloadManager({ downloads, onRefreshStats, token, them
           <Sparkles className="w-5 h-5 text-blue-500" />
           Baixar Mídia via URL
         </h2>
-        <p className={`text-xs mb-5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+        <p className={`text-xs mb-3 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
           Insira qualquer link de vídeo (YouTube, Vimeo, Twitch) ou áudio (SoundCloud, arquivos diretos) para analisar os formatos e baixar em alta definição.
         </p>
+
+        {/* Sandbox alert notification */}
+        <div className="mb-5 p-4 text-xs text-amber-500 bg-amber-500/10 rounded-2xl border border-amber-500/20 flex items-start gap-2.5">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-amber-400">Modo Sandbox Ativo (Ambiente de Demonstração)</p>
+            <p className={`leading-relaxed ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+              Por limitações de segurança e rede no ambiente de nuvem do AI Studio (sem acesso externo direto ou DNS para resolver APIs do Cobalt/YouTube), o download de mídias externas é <strong>emulado de forma robusta e resiliente usando mídias de exemplo de alta qualidade</strong>. O app preservará os metadados (título e miniatura originais) na sua biblioteca para demonstrar o visual completo do sistema e as funcionalidades de download/player sem erros.
+            </p>
+          </div>
+        </div>
 
         <form onSubmit={handleAnalyze} className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">

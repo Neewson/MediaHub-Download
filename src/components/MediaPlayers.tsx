@@ -477,6 +477,12 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
 
   if (!activeMedia) return null;
 
+  const isDemoFallback = activeMedia.url.includes("flower.mp4") ||
+    activeMedia.url.includes("trailer.mp4") ||
+    activeMedia.url.includes("trailer_hd.mp4") ||
+    activeMedia.url.includes("SoundHelix") ||
+    activeMedia.url.startsWith("/downloaded-media/");
+
   return (
     <div className="fixed bottom-0 right-0 left-0 md:left-64 bg-[#0a0f1d] border-t border-slate-800/80 z-40 p-4 shadow-2xl text-slate-100 flex flex-col md:flex-row gap-4 items-center justify-between select-none">
       
@@ -509,9 +515,14 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
         </div>
         <div className="min-w-0">
           <h4 className="text-xs font-bold truncate">{activeMedia.title}</h4>
-          <p className="text-[10px] text-slate-400 mt-0.5 truncate uppercase">
-            {activeMedia.format} • {activeMedia.quality} • {activeMedia.type === "video" ? "Vídeo Player" : "Áudio Player"}
-            {useSynthesizerFallback && " • FALLBACK"}
+          <p className="text-[10px] text-slate-400 mt-0.5 truncate uppercase flex items-center gap-1.5 flex-wrap">
+            <span>{activeMedia.format} • {activeMedia.quality} • {activeMedia.type === "video" ? "Vídeo" : "Áudio"}</span>
+            {isDemoFallback && (
+              <span className="px-1 py-0.5 bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded text-[8px] font-extrabold tracking-wider shrink-0">
+                MÍDIA DEMO (SANDBOX)
+              </span>
+            )}
+            {useSynthesizerFallback && <span className="text-red-400">• FALLBACK</span>}
           </p>
         </div>
         <button 
@@ -732,6 +743,16 @@ export default function MediaPlayers({ currentFile, onClose, playlistFiles = [],
             <div className="absolute bottom-12 left-2 right-2 text-center pointer-events-none">
               <span className="bg-black/85 px-2 py-1 rounded text-xs text-amber-300 font-bold border border-slate-800/80">
                 [Legenda MediaHub] Áudio original sendo reproduzido...
+              </span>
+            </div>
+          )}
+
+          {/* Sandbox alert overlay on video */}
+          {isDemoFallback && (
+            <div className="absolute bottom-2 left-2 pointer-events-auto bg-slate-950/90 border border-amber-500/30 rounded-lg px-2 py-1 text-[9px] text-slate-300 max-w-[210px] shadow-lg flex items-start gap-1 transition-all duration-200 group-hover:bottom-12">
+              <span className="text-amber-400 font-bold shrink-0">⚠️ Sandbox:</span>
+              <span className="leading-normal text-slate-400 font-medium">
+                Mídia demo ativa por restrição de rede no ambiente de nuvem do AI Studio.
               </span>
             </div>
           )}
